@@ -8,9 +8,17 @@ import helpers.clients as helper_clients
 
 from .utils import batch_insert_stock_data
 
+'''
+COMMANDS:
+
+celery -A cfehome worker -l info --pool=solo
+celery -A cfehome beat 
+
+'''
+
 
 @shared_task
-def sync_company_stock_quotes(company_id, days_ago=32, date_format="%Y-%m-%d", verbose=False):
+def sync_company_stock_quotes(company_id=None, days_ago=32, date_format="%Y-%m-%d", verbose=False):
     print("sync_company_stock_quotes works")
     pass
     # Company = apps.get_model("market", "Company")
