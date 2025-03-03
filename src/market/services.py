@@ -1,5 +1,5 @@
 from django.db.models import (
-    Avg, 
+    Avg,
     F,
     RowRange,
     Window,
@@ -25,7 +25,8 @@ def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
     start_date = now - timedelta(days=days)
     end_date = now
     lastest_daily_timestamps = (
-        StockQuote.objects.filter(company__ticker=ticker, time__range=(start_date - timedelta(days=40), end_date))
+        StockQuote.objects.filter(company__ticker=ticker, time__range=(
+            start_date - timedelta(days=40), end_date))
         .annotate(date=TruncDate('time'))
         .values('company', 'date')
         .annotate(latest_time=Max('time'))
@@ -34,7 +35,7 @@ def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
     )
     acutal_timestamps = [x['latest_time'] for x in lastest_daily_timestamps]
     qs = StockQuote.timescale.filter(
-        company__ticker=ticker, 
+        company__ticker=ticker,
         time__range=(start_date, end_date),
         time__in=acutal_timestamps
     )
@@ -43,23 +44,22 @@ def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
     return qs
 
 
-
 def get_daily_moving_averages(ticker, days=28, queryset=None):
     if queryset is None:
         queryset = get_daily_stock_quotes_queryset(ticker=ticker, days=days)
     obj = queryset.annotate(
-            ma_5=Window(
-                expression=Avg('close_price'),
-                order_by=F('time').asc(),
-                partition_by=[],
-                frame=RowRange(start=-4, end=0),
-            ),
-            ma_20=Window(
-                expression=Avg('close_price'),
-                order_by=F('time').asc(),
-                partition_by=[],
-                frame=RowRange(start=-19, end=0),
-            )
+        ma_5=Window(
+            expression=Avg('close_price'),
+            order_by=F('time').asc(),
+            partition_by=[],
+            frame=RowRange(start=-4, end=0),
+        ),
+        ma_20=Window(
+            expression=Avg('close_price'),
+            order_by=F('time').asc(),
+            partition_by=[],
+            frame=RowRange(start=-19, end=0),
+        )
     ).order_by('-time').first()
     if not obj:
         return None
@@ -80,7 +80,7 @@ def get_price_target(ticker, days=28, queryset=None):
     Simplified price target calculation
     """
     if queryset is None:
-        queryset = get_daily_stock_quotes_queryset(ticker, days=days)    
+        queryset = get_daily_stock_quotes_queryset(ticker, days=days)
     daily_data = (
         queryset
         .annotate(
@@ -97,23 +97,26 @@ def get_price_target(ticker, days=28, queryset=None):
             lowest=Min('low_price')
         )
     )
-    
+
     if not daily_data:
         return None
     current_price = float(daily_data['current_price'])
     avg_price = float(daily_data['avg_price'])
     price_range = float(daily_data['highest']) - float(daily_data['lowest'])
-    
+
     # Simple target based on average price and recent range
-    conservative_target = current_price + (price_range * 0.382)  # 38.2% Fibonacci
-    aggressive_target = current_price + (price_range * 0.618)   # 61.8% Fibonacci
-    
+    conservative_target = current_price + \
+        (price_range * 0.382)  # 38.2% Fibonacci
+    aggressive_target = current_price + \
+        (price_range * 0.618)   # 61.8% Fibonacci
+
     return {
         'current_price': round(current_price, 4),
         'conservative_target': round(conservative_target, 4),
         'aggressive_target':  round(aggressive_target, 4),
         'average_price':  round(avg_price, 4)
     }
+
 
 def get_volume_trend(ticker, days=28, queryset=None):
     """
@@ -139,23 +142,24 @@ def get_volume_trend(ticker, days=28, queryset=None):
     if vol is None or avg_vol is None:
         return None
     if vol > 0 and avg_vol > 0:
-        volume_change = (( vol - avg_vol) / avg_vol) * 100
+        volume_change = ((vol - avg_vol) / avg_vol) * 100
     return {
         'avg_volume': float(avg_vol),
         'latest_volume': int(vol),
         'volume_change_percent': float(volume_change)
     }
 
+
 def calculate_rsi(ticker, days=28, queryset=None, period=14):
     """
     Calculate Relative Strength Index (RSI) using Django ORM.
-    
+
     Args:
         ticker (str): Stock ticker symbol
         days (int): Days in the price data (default: 28)
         queryset (list): Stock Quote querset
         period (int): RSI period (default: 14)
-        
+
     Returns:
         dict: RSI value and component calculations
     """
@@ -163,9 +167,9 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
     if period is None:
         period = int(days / 4)
     if queryset is None:
-        queryset = get_daily_stock_quotes_queryset(ticker, days=days, use_bucket=True)
+        queryset = get_daily_stock_quotes_queryset(
+            ticker, days=days, use_bucket=True)
 
-    
     # Calculate price changes and gains/losses with explicit decimal conversion
     movement = queryset.annotate(
         closing_price=ExpressionWrapper(
@@ -184,12 +188,13 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
             output_field=DecimalField(max_digits=10, decimal_places=4)
         ),
         gain=Case(
-            When(price_change__gt=0, 
+            When(price_change__gt=0,
                  then=ExpressionWrapper(
                      F('price_change'),
                      output_field=DecimalField(max_digits=10, decimal_places=4)
                  )),
-            default=Value(0, output_field=DecimalField(max_digits=10, decimal_places=4)),
+            default=Value(0, output_field=DecimalField(
+                max_digits=10, decimal_places=4)),
             output_field=DecimalField(max_digits=10, decimal_places=4)
         ),
         loss=Case(
@@ -198,11 +203,12 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
                      -F('price_change'),
                      output_field=DecimalField(max_digits=10, decimal_places=4)
                  )),
-            default=Value(0, output_field=DecimalField(max_digits=10, decimal_places=4)),
+            default=Value(0, output_field=DecimalField(
+                max_digits=10, decimal_places=4)),
             output_field=DecimalField(max_digits=10, decimal_places=4)
         )
     )
-    
+
     # Calculate initial averages for the first period
     initial_avg = movement.exclude(prev_close__isnull=True)[:period].aggregate(
         avg_gain=Coalesce(
@@ -210,37 +216,40 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
                 Avg('gain'),
                 output_field=DecimalField(max_digits=10, decimal_places=4)
             ),
-            Value(0, output_field=DecimalField(max_digits=10, decimal_places=4))
+            Value(0, output_field=DecimalField(
+                max_digits=10, decimal_places=4))
         ),
         avg_loss=Coalesce(
             ExpressionWrapper(
                 Avg('loss'),
                 output_field=DecimalField(max_digits=10, decimal_places=4)
             ),
-            Value(0, output_field=DecimalField(max_digits=10, decimal_places=4))
+            Value(0, output_field=DecimalField(
+                max_digits=10, decimal_places=4))
         )
     )
-    
+
     # Get subsequent data points for EMA calculation
-    subsequent_data = list(movement.exclude(prev_close__isnull=True)[period:].values('gain', 'loss'))
-    
+    subsequent_data = list(movement.exclude(prev_close__isnull=True)[
+                           period:].values('gain', 'loss'))
+
     # Calculate EMA-based RSI
     avg_gain = initial_avg['avg_gain']
     avg_loss = initial_avg['avg_loss']
     alpha = Decimal(1 / period)  # Smoothing factor
-    
+
     # Update moving averages using EMA formula
     for data in subsequent_data:
         avg_gain = (avg_gain * (1 - alpha) + data['gain'] * alpha)
         avg_loss = (avg_loss * (1 - alpha) + data['loss'] * alpha)
-    
+
     # Prevent division by zero
     if avg_loss == 0:
         rsi = 100
     else:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
-    
+
     return {
         'rsi': round(float(rsi), 4),
         'avg_gain': round(float(avg_gain), 4),
@@ -250,7 +259,7 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
     }
 
 
-def get_stock_indicators(ticker = "AAPL", days=30):
+def get_stock_indicators(ticker="AAPL", days=30):
     queryset = get_daily_stock_quotes_queryset(ticker, days=days)
     if queryset.count() == 0:
         raise Exception(f"Data for {ticker} not found")
@@ -277,7 +286,7 @@ def get_stock_indicators(ticker = "AAPL", days=30):
     if rsi > 70:
         signals.append(-1)  # Overbought
     elif rsi < 30:
-        signals.append(1) # Oversold
+        signals.append(1)  # Oversold
     else:
         signals.append(0)
     return {
@@ -289,5 +298,5 @@ def get_stock_indicators(ticker = "AAPL", days=30):
             **volume_trend,
             **rsi_data,
         }
-        
+
     }
